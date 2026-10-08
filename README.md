@@ -153,13 +153,16 @@ Run automated data quality tests verifying primary keys, null checks, allowed va
 dbt test --profiles-dir .
 ```
 
-The test suite executes 26 assertions across two layers:
-- **Staging Layer (`models/staging/schema.yml`)**:
+The test suite executes **29 assertions** across two categories:
+- **Generic Schema Contracts (26 tests)**:
   - Primary key uniqueness and non-nullability on `customer_id`, `order_id`, and `order_item_id`.
   - Referential integrity (`relationships` tests) ensuring `orders.customer_id -> customers.customer_id` and `order_items.order_id -> orders.order_id`.
   - Allowed status values (`accepted_values`: `['completed', 'returned', 'cancelled']`).
-- **Marts Layer (`models/marts/schema.yml`)**:
   - Non-null metrics on revenue, counts, and date grains across `dim_customers` and `fct_daily_sales`.
+- **Singular Business Invariant Tests (`tests/*.sql` - 3 tests)**:
+  - `assert_net_revenue_le_gross_revenue`: Validates net revenue never exceeds gross revenue.
+  - `assert_no_future_orders`: Asserts order dates are not set in the future.
+  - `assert_positive_item_amounts`: Asserts quantities, unit prices, and subtotals are strictly positive (> 0).
 
 ---
 
