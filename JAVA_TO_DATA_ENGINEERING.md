@@ -286,7 +286,26 @@ This automatically maintains `snapshots.customers_snapshot` in DuckDB, enabling 
 
 ---
 
-## 12. Where to Go From Here in this Codebase
+## 12. The Semantic Layer & Metric Store (Decoupling Business Logic from SQL)
+
+In traditional software systems, business metrics (e.g. *Average Order Value*, *Active Subscriptions*, *Churn*) are calculated inside Java domain services:
+```java
+public BigDecimal calculateAov(List<Order> orders) {
+    BigDecimal netSales = ...;
+    return netSales.divide(BigDecimal.valueOf(orders.size()), RoundingMode.HALF_UP);
+}
+```
+**The Problem in Analytics**: Every BI tool (Tableau, Looker, Excel, ad-hoc Python) writes their own SQL `GROUP BY` logic. If Marketing defines AOV including taxes and Finance excludes discounts, the numbers disagree across dashboards.
+
+**The Solution: The Semantic Layer / Metric Store**:
+- Business logic is declared **once as code** in YAML ([models/semantic/metricflow_semantic_models.yml](file:///sdcard/Download/termux/modern-data-stack-lab/models/semantic/metricflow_semantic_models.yml)).
+- Defines **Entities** (`order_id`, `customer_id`), **Dimensions** (`status`, `order_date`), and **Measures** (`order_count`, `order_completed_amount`).
+- Metrics like `average_order_value` (`type: ratio`) are computed dynamically regardless of what dimensions or time windows a user slices by.
+- Powered by a daily time spine ([models/semantic/metricflow_time_spine.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/semantic/metricflow_time_spine.sql)) to guarantee accurate time-grain aggregations without missing zero-activity days.
+
+---
+
+## 13. Where to Go From Here in this Codebase
 
 Follow this recommended path to see these concepts in action:
 
@@ -294,10 +313,12 @@ Follow this recommended path to see these concepts in action:
 2. **Explore CDC & Streaming Logs**: Run `python simulate_cdc_events.py` and inspect [models/staging/stg_orders_cdc_current.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_orders_cdc_current.sql).
 3. **Explore Hive Partitioning**: Check [models/staging/stg_lake_orders.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_lake_orders.sql) to see zero-overhead partition pruning.
 4. **Run SCD Type 2 Snapshots**: Run `dbt snapshot --profiles-dir .` and inspect [snapshots/customers_snapshot.sql](file:///sdcard/Download/termux/modern-data-stack-lab/snapshots/customers_snapshot.sql).
-5. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py).
-6. **Run dbt & Contracts**: Run `dbt run --profiles-dir .` and `dbt test --profiles-dir .` (all 26 tests).
-7. **Launch Orchestrator**: Run `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
-8. **Reverse-ETL to App DB**: Run `python reverse_etl.py` to populate operational tables.
-9. **Launch Terminal BI**: Run `python dashboard.py` for rich terminal KPI dashboards.
+5. **Inspect the Semantic Layer**: Check [models/semantic/metricflow_semantic_models.yml](file:///sdcard/Download/termux/modern-data-stack-lab/models/semantic/metricflow_semantic_models.yml) and [models/semantic/metricflow_time_spine.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/semantic/metricflow_time_spine.sql).
+6. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py).
+7. **Run dbt & Contracts**: Run `dbt run --profiles-dir .` and `dbt test --profiles-dir .` (all 26 tests).
+8. **Launch Orchestrator**: Run `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
+9. **Reverse-ETL to App DB**: Run `python reverse_etl.py` to populate operational tables.
+10. **Launch Terminal BI**: Run `python dashboard.py` for rich terminal KPI dashboards.
+
 
 

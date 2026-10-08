@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: metricflow_time_spine
+    description: "Daily time spine required by dbt MetricFlow"
+    columns:
+      - name: date_day
+        granularity: day
+
+semantic_models:
+  - name: orders_semantic_model
+    description: "Semantic layer model for orders, defining dimensions, entities, and base measures"
+    model: ref('stg_orders')
+    defaults:
+      agg_time_dimension: order_date
+
+    entities:
+      - name: order_id
+        type: primary
+      - name: customer_id
+        type: foreign
+
+    dimensions:
+      - name: order_date
+        type: time
+        type_params:
+          time_granularity: day
+      - name: status
+        type: categorical
+
+    measures:
+      - name: order_count
+        description: "Total count of orders placed"
+        agg: count
+        expr: order_id
+      - name: order_gross_amount
+        description: "Total order dollar value across all statuses"
+        agg: sum
+        expr: total_amount
+      - name: order_completed_amount
+        description: "Total net dollar value for completed transactions"
+        agg: sum
+        expr: case when status = 'completed' then total_amount else 0 end
+
+metrics:
+  - name: total_orders
+    description: "Total order volume"
+    label: "Total Orders"
+    type: simple
+    type_params:
+      measure: order_count
+
+  - name: net_sales_revenue
+    description: "Total completed net revenue"
+    label: "Net Revenue ($)"
+    type: simple
+    type_params:
+      measure: order_completed_amount
+
+  - name: average_order_value
+    description: "Average dollar value per order (AOV = net_sales_revenue / total_orders)"
+    label: "Average Order Value (AOV)"
+    type: ratio
+    type_params:
+      numerator: net_sales_revenue
+      denominator: total_orders
