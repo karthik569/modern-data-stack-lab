@@ -305,7 +305,30 @@ public BigDecimal calculateAov(List<Order> orders) {
 
 ---
 
-## 13. Where to Go From Here in this Codebase
+## 13. Incremental Processing & Watermarks (Handling Big Data Without Full Scans)
+
+In backend software engineering, batch jobs often poll an entire database table (`SELECT * FROM orders`) or run pagination with `LIMIT / OFFSET`. At millions or billions of rows, full scans become slow and expensive.
+
+In modern Data Engineering, we use **Incremental Materialization with High-Watermarks**:
+- **Initial Run**: Builds the target table with full historical data.
+- **Subsequent Runs**: Compiles only records that arrived **after** the maximum timestamp currently stored in the table:
+  ```sql
+  {% if is_incremental() %}
+      WHERE order_date > (SELECT max(order_date) FROM {{ this }})
+  {% endif %}
+  ```
+- **Merge / Upsert**: Automatically merges new rows into the warehouse based on `unique_key='order_id'`.
+
+See [models/marts/fct_orders_incremental.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/marts/fct_orders_incremental.sql):
+Run with:
+```bash
+dbt run --select fct_orders_incremental --profiles-dir .
+```
+This reduces compute costs by orders of magnitude on large datasets because 99% of historical data is never re-processed.
+
+---
+
+## 14. Where to Go From Here in this Codebase
 
 Follow this recommended path to see these concepts in action:
 
@@ -313,12 +336,14 @@ Follow this recommended path to see these concepts in action:
 2. **Explore CDC & Streaming Logs**: Run `python simulate_cdc_events.py` and inspect [models/staging/stg_orders_cdc_current.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_orders_cdc_current.sql).
 3. **Explore Hive Partitioning**: Check [models/staging/stg_lake_orders.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_lake_orders.sql) to see zero-overhead partition pruning.
 4. **Run SCD Type 2 Snapshots**: Run `dbt snapshot --profiles-dir .` and inspect [snapshots/customers_snapshot.sql](file:///sdcard/Download/termux/modern-data-stack-lab/snapshots/customers_snapshot.sql).
-5. **Inspect the Semantic Layer**: Check [models/semantic/metricflow_semantic_models.yml](file:///sdcard/Download/termux/modern-data-stack-lab/models/semantic/metricflow_semantic_models.yml) and [models/semantic/metricflow_time_spine.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/semantic/metricflow_time_spine.sql).
-6. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py).
-7. **Run dbt & Contracts**: Run `dbt run --profiles-dir .` and `dbt test --profiles-dir .` (all 26 tests).
-8. **Launch Orchestrator**: Run `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
-9. **Reverse-ETL to App DB**: Run `python reverse_etl.py` to populate operational tables.
-10. **Launch Terminal BI**: Run `python dashboard.py` for rich terminal KPI dashboards.
+5. **Inspect Incremental Models**: Check [models/marts/fct_orders_incremental.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/marts/fct_orders_incremental.sql).
+6. **Inspect the Semantic Layer**: Check [models/semantic/metricflow_semantic_models.yml](file:///sdcard/Download/termux/modern-data-stack-lab/models/semantic/metricflow_semantic_models.yml) and [models/semantic/metricflow_time_spine.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/semantic/metricflow_time_spine.sql).
+7. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py).
+8. **Run dbt & Contracts**: Run `dbt run --profiles-dir .` and `dbt test --profiles-dir .` (all 26 tests).
+9. **Launch Orchestrator**: Run `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
+10. **Reverse-ETL to App DB**: Run `python reverse_etl.py` to populate operational tables.
+11. **Launch Terminal BI**: Run `python dashboard.py` for rich terminal KPI dashboards.
+
 
 
 
