@@ -254,16 +254,50 @@ In this repo:
 
 ---
 
-## 11. Where to Go From Here in this Codebase
+## 11. Slowly Changing Dimensions (SCD Type 2) & dbt Snapshots
+
+In transactional databases, an update statement overwrites the old row:
+`UPDATE customers SET email = 'new@corp.com' WHERE customer_id = 1;`
+In software engineering, you lose the historical record unless you use complex audit tables (like Hibernate Envers).
+
+In Data Engineering, **Slowly Changing Dimensions (SCD Type 2)** tracks historical state changes by keeping old versions and stamping validity windows:
+- `dbt_valid_from`: Timestamp when this version of the entity became active.
+- `dbt_valid_to`: Timestamp when this version was superseded (or `NULL` if currently active).
+
+### Example in this repo ([snapshots/customers_snapshot.sql](file:///sdcard/Download/termux/modern-data-stack-lab/snapshots/customers_snapshot.sql)):
+```sql
+{% snapshot customers_snapshot %}
+{{
+    config(
+      target_schema='snapshots',
+      unique_key='customer_id',
+      strategy='check',
+      check_cols=['customer_name', 'email', 'country']
+    )
+}}
+select customer_id, customer_name, email, country, created_at from {{ ref('stg_customers') }}
+{% endsnapshot %}
+```
+Run with:
+```bash
+dbt snapshot --profiles-dir .
+```
+This automatically maintains `snapshots.customers_snapshot` in DuckDB, enabling point-in-time time-travel queries (e.g. *"What was the customer's country on the date of Order #42?"*) with zero manual boilerplate!
+
+---
+
+## 12. Where to Go From Here in this Codebase
 
 Follow this recommended path to see these concepts in action:
 
 1. **Inspect Raw Generation & Data Lake**: Look at [generate_raw_data.py](file:///sdcard/Download/termux/modern-data-stack-lab/generate_raw_data.py) to see both flat Parquet and Hive-partitioned files generated.
 2. **Explore CDC & Streaming Logs**: Run `python simulate_cdc_events.py` and inspect [models/staging/stg_orders_cdc_current.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_orders_cdc_current.sql).
 3. **Explore Hive Partitioning**: Check [models/staging/stg_lake_orders.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_lake_orders.sql) to see zero-overhead partition pruning.
-4. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py).
-5. **Run dbt & Contracts**: Run `dbt run --profiles-dir .` and `dbt test --profiles-dir .` (all 26 tests).
-6. **Launch Orchestrator**: Run `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
-7. **Reverse-ETL to App DB**: Run `python reverse_etl.py` to populate operational tables.
-8. **Launch Terminal BI**: Run `python dashboard.py` for rich terminal KPI dashboards.
+4. **Run SCD Type 2 Snapshots**: Run `dbt snapshot --profiles-dir .` and inspect [snapshots/customers_snapshot.sql](file:///sdcard/Download/termux/modern-data-stack-lab/snapshots/customers_snapshot.sql).
+5. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py).
+6. **Run dbt & Contracts**: Run `dbt run --profiles-dir .` and `dbt test --profiles-dir .` (all 26 tests).
+7. **Launch Orchestrator**: Run `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
+8. **Reverse-ETL to App DB**: Run `python reverse_etl.py` to populate operational tables.
+9. **Launch Terminal BI**: Run `python dashboard.py` for rich terminal KPI dashboards.
+
 
