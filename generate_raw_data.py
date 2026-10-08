@@ -72,6 +72,35 @@ def generate_orders_and_items(customers_df, num_orders=1000):
 
     return pl.DataFrame(orders), pl.DataFrame(items)
 
+LAKE_DIR = os.path.join(os.path.dirname(__file__), "data", "lake")
+os.makedirs(LAKE_DIR, exist_ok=True)
+
+def write_hive_partitioned_orders(df_orders):
+    """
+    Writes orders to an Apache Hive-partitioned directory layout:
+    data/lake/orders/year=YYYY/month=MM/orders_part_*.parquet
+    Demonstrates standard Data Lake partitioning and partition pruning.
+    """
+    df_with_parts = df_orders.with_columns([
+        pl.col("order_date").str.to_datetime().dt.year().alias("year"),
+        pl.col("order_date").str.to_datetime().dt.strftime("%m").alias("month")
+    ])
+
+    orders_lake_dir = os.path.join(LAKE_DIR, "orders")
+    partitions = df_with_parts.select(["year", "month"]).unique().iter_rows(named=True)
+
+    part_count = 0
+    for p in partitions:
+        y, m = p["year"], p["month"]
+        part_dir = os.path.join(orders_lake_dir, f"year={y}", f"month={m}")
+        os.makedirs(part_dir, exist_ok=True)
+        part_df = df_with_parts.filter((pl.col("year") == y) & (pl.col("month") == m)).drop(["year", "month"])
+        part_file = os.path.join(part_dir, "data.parquet")
+        part_df.write_parquet(part_file)
+        part_count += 1
+
+    print(f"Saved Hive-partitioned lake: {orders_lake_dir} ({part_count} partitions)")
+
 def run():
     print("Generating synthetic e-commerce dataset...")
     df_customers = generate_customers()
@@ -88,6 +117,9 @@ def run():
     print(f"Saved: {cust_path} ({len(df_customers)} rows)")
     print(f"Saved: {ord_path} ({len(df_orders)} rows)")
     print(f"Saved: {items_path} ({len(df_items)} rows)")
+
+    # Write Hive-partitioned data lake
+    write_hive_partitioned_orders(df_orders)
 
 if __name__ == "__main__":
     run()

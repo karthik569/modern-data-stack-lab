@@ -227,14 +227,43 @@ public class CustomerProfile {
 
 ---
 
-## 10. Where to Go From Here in this Codebase
+## 10. Data Lake Architecture & Hive Partition Pruning
+
+In relational databases (RDBMS), large tables are indexed (B-Trees) or partitioned into database tablespaces.
+
+In Data Engineering and cloud storage (S3 / GCS / HDFS), files are laid out using **Apache Hive Partitioning**:
+```text
+data/lake/orders/
+  ├── year=2026/
+  │   ├── month=07/data.parquet
+  │   ├── month=08/data.parquet
+  │   ├── month=09/data.parquet
+  │   └── month=10/data.parquet
+```
+
+### Why This Matters: Partition Pruning (Skipping Disk I/O)
+When an analytical query asks:
+```sql
+SELECT * FROM stg_lake_orders WHERE order_year = 2026 AND order_month = 10;
+```
+DuckDB detects the directory path, scans **only** `month=10/data.parquet`, and **skips 75% of the data lake entirely** without even opening the other files!
+
+In this repo:
+- [generate_raw_data.py](file:///sdcard/Download/termux/modern-data-stack-lab/generate_raw_data.py) partitions orders into `data/lake/orders/year=YYYY/month=MM/`.
+- [models/staging/stg_lake_orders.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_lake_orders.sql) demonstrates DuckDB automatically extracting `year` and `month` as virtual columns from directory paths.
+
+---
+
+## 11. Where to Go From Here in this Codebase
 
 Follow this recommended path to see these concepts in action:
 
-1. **Inspect Raw Generation**: Look at [generate_raw_data.py](file:///sdcard/Download/termux/modern-data-stack-lab/generate_raw_data.py) to see how synthetic transactional data is saved to Parquet.
-2. **Explore CDC & Streaming Logs**: Run `python simulate_cdc_events.py` and inspect [models/staging/stg_orders_cdc_current.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_orders_cdc_current.sql) to see how append-only logs are transformed into current state.
-3. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py) to see pure DuckDB creating staging views and marts.
-4. **Explore dbt Models**: Browse [models/staging/](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging) and [models/marts/](file:///sdcard/Download/termux/modern-data-stack-lab/models/marts). Notice how `{{ ref(...) }}` links models together.
-5. **Run the Orchestrator**: Execute `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
-6. **Execute Reverse-ETL**: Run `python reverse_etl.py` to push modeled marts into operational storage for downstream application use.
+1. **Inspect Raw Generation & Data Lake**: Look at [generate_raw_data.py](file:///sdcard/Download/termux/modern-data-stack-lab/generate_raw_data.py) to see both flat Parquet and Hive-partitioned files generated.
+2. **Explore CDC & Streaming Logs**: Run `python simulate_cdc_events.py` and inspect [models/staging/stg_orders_cdc_current.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_orders_cdc_current.sql).
+3. **Explore Hive Partitioning**: Check [models/staging/stg_lake_orders.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_lake_orders.sql) to see zero-overhead partition pruning.
+4. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py).
+5. **Run dbt & Contracts**: Run `dbt run --profiles-dir .` and `dbt test --profiles-dir .` (all 26 tests).
+6. **Launch Orchestrator**: Run `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
+7. **Reverse-ETL to App DB**: Run `python reverse_etl.py` to populate operational tables.
+8. **Launch Terminal BI**: Run `python dashboard.py` for rich terminal KPI dashboards.
 
