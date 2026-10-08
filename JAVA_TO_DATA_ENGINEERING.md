@@ -165,11 +165,46 @@ Data engineers use **Polars** (written in Rust) or **PyArrow** instead of iterat
 
 ---
 
-## 8. Where to Go From Here in this Codebase
+## 8. Change Data Capture (CDC), Event Sourcing & the Outbox Pattern
+
+As a Java / microservices engineer, you may know Kafka, Debezium, and the **Transactional Outbox Pattern**:
+- Instead of batch polling a database every midnight, your Spring service commits mutations to the database.
+- A tool like **Debezium** captures row-level changes from the MySQL/PostgreSQL write-ahead log (WAL) and publishes an append-only event stream to Kafka:
+  ```json
+  {"op": "c", "order_id": 1059, "status": "pending", "ts_ms": 1775664145000}
+  {"op": "u", "order_id": 1059, "status": "completed", "ts_ms": 1775665945000}
+  ```
+- A Kafka Connect S3 Sink stores these immutable events into Parquet files.
+
+### How Data Engineers Reconstruct Current State (Deduplication)
+In the warehouse, data engineers use **SQL Window Functions** over the event stream rather than updating records in place.
+
+See [simulate_cdc_events.py](file:///sdcard/Download/termux/modern-data-stack-lab/simulate_cdc_events.py) and [models/staging/stg_orders_cdc_current.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_orders_cdc_current.sql):
+```sql
+with ranked_events as (
+    select
+        order_id,
+        status,
+        total_amount,
+        row_number() over (
+            partition by order_id
+            order by ts_ms desc
+        ) as deduplication_rank
+    from raw_cdc_events
+)
+select * from ranked_events where deduplication_rank = 1;
+```
+This guarantees that analytical queries always see the latest snapshot of each entity with zero mutable locks!
+
+---
+
+## 9. Where to Go From Here in this Codebase
 
 Follow this recommended path to see these concepts in action:
 
 1. **Inspect Raw Generation**: Look at [generate_raw_data.py](file:///sdcard/Download/termux/modern-data-stack-lab/generate_raw_data.py) to see how synthetic transactional data is saved to Parquet.
-2. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py) to see pure DuckDB creating staging views and marts.
-3. **Explore dbt Models**: Browse [models/staging/](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging) and [models/marts/](file:///sdcard/Download/termux/modern-data-stack-lab/models/marts). Notice how `{{ ref(...) }}` links models together.
-4. **Run the dbt Pipeline**: Execute `dbt run --profiles-dir .` and inspect the resulting tables in `data/warehouse.duckdb`.
+2. **Explore CDC & Streaming Logs**: Run `python simulate_cdc_events.py` and inspect [models/staging/stg_orders_cdc_current.sql](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging/stg_orders_cdc_current.sql) to see how append-only logs are transformed into current state.
+3. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py) to see pure DuckDB creating staging views and marts.
+4. **Explore dbt Models**: Browse [models/staging/](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging) and [models/marts/](file:///sdcard/Download/termux/modern-data-stack-lab/models/marts). Notice how `{{ ref(...) }}` links models together.
+5. **Run the Orchestrator**: Execute `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
+

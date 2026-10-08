@@ -13,3 +13,7 @@ sources:
       - name: raw_order_items
         meta:
           external_location: "'/sdcard/Download/termux/modern-data-stack-lab/data/raw/order_items.parquet'"
+      - name: raw_cdc_events
+        meta:
+          external_location: "'/sdcard/Download/termux/modern-data-stack-lab/data/events/order_cdc_events.parquet'"
+
