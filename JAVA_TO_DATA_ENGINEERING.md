@@ -198,7 +198,36 @@ This guarantees that analytical queries always see the latest snapshot of each e
 
 ---
 
-## 9. Where to Go From Here in this Codebase
+## 9. Reverse-ETL: Syncing Analytical Marts Back to Operational Apps (Spring / JPA)
+
+In software engineering, transactional apps cannot query analytical warehouses directly because:
+- Analytics queries can lock tables or have unpredictable latency.
+- Spring Boot / JPA entities are mapped to operational stores like PostgreSQL or MySQL.
+
+**Reverse-ETL** solves this by syncing modeled, pre-aggregated marts (`dim_customers`, `fct_daily_sales`) **back** into an operational database so your Spring Boot services, microservices, and customer-facing APIs can query enriched data via standard `@Entity` repositories with sub-millisecond response times.
+
+### Example in this repo ([reverse_etl.py](file:///sdcard/Download/termux/modern-data-stack-lab/reverse_etl.py)):
+```bash
+# Syncs DuckDB marts into operational SQLite / PostgreSQL
+python reverse_etl.py
+```
+This populates operational tables like `operational_customer_profiles`, allowing a Spring Boot entity like:
+```java
+@Entity
+@Table(name = "operational_customer_profiles")
+public class CustomerProfile {
+    @Id
+    private Long customerId;
+    private String customerName;
+    private BigDecimal lifetimeSpend; // Pre-calculated by DuckDB / dbt!
+    private Integer totalOrders;
+    private LocalDateTime syncedAt;
+}
+```
+
+---
+
+## 10. Where to Go From Here in this Codebase
 
 Follow this recommended path to see these concepts in action:
 
@@ -207,4 +236,5 @@ Follow this recommended path to see these concepts in action:
 3. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py) to see pure DuckDB creating staging views and marts.
 4. **Explore dbt Models**: Browse [models/staging/](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging) and [models/marts/](file:///sdcard/Download/termux/modern-data-stack-lab/models/marts). Notice how `{{ ref(...) }}` links models together.
 5. **Run the Orchestrator**: Execute `PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job`.
+6. **Execute Reverse-ETL**: Run `python reverse_etl.py` to push modeled marts into operational storage for downstream application use.
 

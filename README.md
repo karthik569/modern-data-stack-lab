@@ -206,3 +206,23 @@ print(con.execute("SELECT * FROM marts.fct_daily_sales ORDER BY order_day DESC L
 duckdb data/warehouse.duckdb -c "SELECT * FROM marts.dim_customers LIMIT 5;"
 ```
 
+---
+
+### 7. Reverse-ETL: Syncing Marts to Operational Databases
+
+Syndicate modeled analytical marts from DuckDB back into operational databases (SQLite or PostgreSQL) where backend services (e.g., Spring Boot, REST APIs) can query enriched profiles at low latency:
+
+```bash
+# Syncs marts into operational SQLite (data/operational.db)
+python reverse_etl.py
+
+# Or export to PostgreSQL:
+POSTGRES_URL="postgresql://user:password@localhost:5432/appdb" python reverse_etl.py
+```
+
+Inspect synced operational SQLite tables:
+```bash
+sqlite3 data/operational.db "SELECT customer_name, lifetime_spend, synced_at FROM operational_customer_profiles LIMIT 5;"
+```
+
+
