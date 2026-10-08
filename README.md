@@ -225,4 +225,21 @@ Inspect synced operational SQLite tables:
 sqlite3 data/operational.db "SELECT customer_name, lifetime_spend, synced_at FROM operational_customer_profiles LIMIT 5;"
 ```
 
+---
+
+### 8. Interactive Terminal BI Dashboard
+
+Visualize executive KPIs, category revenue distributions, VIP customer rankings, and daily velocity directly in your terminal with zero browser/server overhead:
+
+```bash
+python dashboard.py
+```
+
+Features included:
+- **Executive Metric Cards**: Cohort size, completed net revenue, total order volume, and average customer LTV.
+- **Category Share Bar Chart**: Units sold, net revenue, and proportional share bars.
+- **VIP Customer Segment Table**: Top lifetime value customers, order history, and activity dates.
+- **Daily Velocity Trend Chart**: Recent 6-day order volumes and revenue bars.
+
+
 
