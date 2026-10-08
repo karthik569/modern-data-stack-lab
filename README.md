@@ -163,7 +163,28 @@ The test suite executes 26 assertions across two layers:
 
 ---
 
-### 5. Querying the Warehouse
+### 5. Pipeline Orchestration with Dagster
+
+The lab features a unified orchestration layer using **Dagster Software-Defined Assets (SDA)**:
+- **`raw_parquet_data`**: Orchestrates synthetic ingestion into `data/raw/*.parquet`.
+- **`modern_data_stack_dbt_assets`**: Translates dbt models into first-class Dagster assets, streaming `dbt build` (transformations + tests) into the lineage graph.
+- **`mds_full_pipeline_job`**: End-to-end execution job.
+- **`daily_mds_pipeline_schedule`**: Configured daily cron schedule (`0 0 * * *`).
+
+#### Run the Full Pipeline via Dagster CLI:
+```bash
+PYTHONPATH=src:. dagster job execute -m modern_data_stack_lab -j mds_full_pipeline_job
+```
+
+#### Launch Dagster Web UI (Development Server):
+```bash
+PYTHONPATH=src:. dagster dev -m modern_data_stack_lab -h 0.0.0.0 -p 3000
+```
+Open `http://localhost:3000` to inspect the visual dependency DAG, launch runs, and view asset health.
+
+---
+
+### 6. Querying the Warehouse
 
 Query the local DuckDB warehouse (`data/warehouse.duckdb`) directly via Python or the DuckDB CLI.
 

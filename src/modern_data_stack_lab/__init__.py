@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from modern-data-stack-lab!")
+from .definitions import defs
+
+__all__ = ["defs"]
