@@ -1,0 +1,175 @@
+# Data Engineering Primer for Java Developers
+
+Welcome! If you come from a Java, Spring Boot, or transactional backend engineering background, modern data engineering can feel full of buzzwords (OLAP, Parquet, dbt, Marts, Kimball). 
+
+This guide bridges the gap by mapping core Data Engineering (DE) paradigms directly to familiar Java and relational database (RDBMS) patterns, using the codebase in this repository as a concrete reference.
+
+---
+
+## 1. High-Level Mental Model: Software Engineering vs Data Engineering
+
+| Java / Backend Engineering (SWE) | Data Engineering (DE) | In This Repository |
+| :--- | :--- | :--- |
+| **Primary Goal** | High concurrency, low latency per transaction (CRUD) | High throughput, massive batch scans & aggregations |
+| **Storage Engine** | Row-oriented RDBMS (PostgreSQL, MySQL, Oracle) | Columnar storage (**Parquet**, **DuckDB**) |
+| **Schema Paradigm** | Third Normal Form (3NF) to prevent duplicate writes | Dimensional Modeling (Kimball Star Schema / Denormalized) |
+| **Data Processing** | Java Streams, OOP entities, ORMs (Hibernate/JPA) | Vectorized columnar engines (**Polars**, SQL in **DuckDB**) |
+| **Transformation Logic** | Service layer business logic & DB migrations (Flyway/Liquibase) | Declarative analytical SQL models (**dbt**) |
+| **Orchestration** | Quartz, Spring Scheduled, Message Queues (RabbitMQ/Kafka) | DAG Orchestrators (**Dagster**, Airflow) |
+
+---
+
+## 2. OLTP vs OLAP: Row-Oriented vs Column-Oriented
+
+### The Java / OLTP World (Row Store)
+In transactional backend systems (OLTP):
+- You read or write **one entire row/entity** at a time (e.g. `UserRepository.findById(Long id)`).
+- Hard disks/pages store all fields of customer #1 adjacent to each other:
+  `[id=1, name="Alice", email="alice@corp.com", ...][id=2, name="Bob", ...]`
+- Great for quick point-lookups and single-record writes (`INSERT INTO orders VALUES (...)`).
+- **Terrible for analytics**: If you run `SELECT AVG(total_amount) FROM orders;`, the engine must read every column of every customer into memory just to discard 90% of the payload.
+
+### The Data Engineering / OLAP World (Columnar Store)
+In analytical warehouses (OLAP):
+- You rarely query one user; you query millions of records asking: *"What was total revenue per category last quarter?"*
+- **Parquet** and **DuckDB** store data **column-by-column**:
+  `total_amount: [100.0, 45.5, 320.0, ...]`  
+  `status: ['completed', 'pending', 'completed', ...]`
+- **Vectorized Scans & Compression**: Because identical data types sit together, run-length and dictionary compression shrink storage by 70–90%. When computing `SUM(total_amount)`, the CPU reads **only** the `total_amount` column straight into vector registers (SIMD), skipping disk I/O for unused fields.
+
+```text
+Row Storage (PostgreSQL / JPA):
+[ID | Name | Country | Amount] -> Page 1: Alice, Page 2: Bob
+
+Column Storage (Parquet / DuckDB):
+[Amount Column]: [100.0, 45.5, 320.0] -> Scanned in a single CPU burst
+[Country Column]: ['US', 'IN', 'DE']
+```
+
+---
+
+## 3. Storage Format: Database Tables vs Parquet Files
+
+In Java backends, data lives in database tables managed by a server daemon. In Data Engineering, files in object storage (S3, GCS, or local filesystem) are treated as first-class datasets:
+
+- **Apache Parquet (`data/raw/*.parquet`)**: An open, immutable, binary columnar file format with built-in metadata (row groups, column statistics, min/max values for partition pruning).
+- **DuckDB**: Think of DuckDB as the **"SQLite for Analytics"**. It is an embedded in-process C++ engine (no background server daemon needed) that executes analytical SQL directly over Parquet files, Arrow tables, or memory.
+
+```python
+# No database server setup required - directly query Parquet files!
+import duckdb
+duckdb.query("SELECT category, SUM(subtotal) FROM 'data/raw/order_items.parquet' GROUP BY 1")
+```
+
+---
+
+## 4. Modeling: 3NF (Normalized) vs Kimball Dimensional Modeling (Star Schema)
+
+As a Java developer, you are taught **Third Normal Form (3NF)**: normalize tables, split tables to eliminate redundancy, and use foreign keys.
+
+In Data Engineering, excessive joins at large scale are expensive. We use **Dimensional Modeling (Kimball Star Schema)**:
+
+### Fact Tables (`fct_`)
+- Represent **business events or measurements** occurring at a specific point in time.
+- Numeric metrics and foreign keys.
+- Example in this repo: `marts/fct_daily_sales.sql`
+  - Grain: 1 day per category.
+  - Metrics: `total_orders`, `items_sold`, `gross_revenue`, `net_revenue`.
+
+### Dimension Tables (`dim_`)
+- Represent the **context/entities** (Who, What, Where) surrounding an event.
+- Denormalized attributes to avoid multi-table joins during BI dashboard queries.
+- Example in this repo: `marts/dim_customers.sql`
+  - Grain: 1 row per customer.
+  - Contains descriptive fields plus pre-computed customer aggregations (`lifetime_spend`, `total_orders`).
+
+---
+
+## 5. ETL vs ELT: Where Does Transformation Happen?
+
+### Legacy ETL (Extract -> Transform -> Load)
+Popular when compute/warehouse storage was expensive. Specialized servers (like Java/Spring Batch apps or Informatica) transformed data in memory before writing clean rows into the database.
+
+### Modern ELT (Extract -> Load -> Transform)
+With engines like DuckDB, Snowflake, and BigQuery:
+1. **Extract & Load**: Ingest raw, unaltered data straight into storage/data lake (`generate_raw_data.py` -> `data/raw/*.parquet`).
+2. **Transform in the Warehouse**: Use SQL inside the analytical engine to build staging views and materialized marts. Compute is co-located with storage.
+
+---
+
+## 6. What is `dbt` (Data Build Tool)?
+
+If you know Java database tools, here is the analogy:
+- **Flyway / Liquibase**: Manages DDL migrations (`CREATE TABLE`, `ALTER TABLE`) to evolve a transactional database schema version by version.
+- **dbt**: Manages **data transformations as code**. 
+
+### How dbt works:
+- You write pure `SELECT` statements (e.g. `models/marts/dim_customers.sql`).
+- dbt automatically wraps your SQL with `CREATE TABLE AS SELECT ...` or `CREATE VIEW AS SELECT ...` depending on configuration.
+- **Dependency Graph (DAG)**: When you use `{{ ref('stg_orders') }}`, dbt parses your SQL, builds a Directed Acyclic Graph, and determines the exact topological order to execute models in parallel.
+- **Data Contracts & Testing (Like JUnit / Bean Validation for Data)**:
+  Instead of writing manual boilerplate assertions or JUnit integration tests with mock containers, data quality contracts are declared directly alongside the schema in YAML.
+  
+  In this repo (`models/staging/schema.yml` and `models/marts/schema.yml`), dbt automatically compiles and executes 26 SQL assertion tests:
+  ```yaml
+  columns:
+    - name: customer_id
+      data_tests:
+        - unique       # Compiles to: SELECT customer_id FROM ... GROUP BY 1 HAVING count(*) > 1
+        - not_null     # Compiles to: SELECT * FROM ... WHERE customer_id IS NULL
+    - name: status
+      data_tests:
+        - accepted_values:
+            arguments:
+              values: ['completed', 'returned', 'cancelled']
+    - name: order_id
+      data_tests:
+        - relationships:  # Foreign-key check equivalent to JPA @ManyToOne constraint
+            arguments:
+              to: ref('stg_orders')
+              field: order_id
+  ```
+  Run with:
+  ```bash
+  dbt test --profiles-dir .
+  ```
+  If any assertion returns rows (e.g. orphan foreign keys or duplicate IDs), dbt fails the build immediately before bad data can corrupt downstream marts.
+
+---
+
+## 7. Mapping Java Code to Data Engineering Constructs
+
+### Example 1: Summing Aggregations
+
+#### In Java (Streams / Entity List):
+```java
+Map<String, BigDecimal> revenueByCategory = orderItems.stream()
+    .collect(Collectors.groupingBy(
+        OrderItem::getCategory,
+        Collectors.reducing(BigDecimal.ZERO, OrderItem::getSubtotal, BigDecimal::add)
+    ));
+```
+
+#### In Modern Data Engineering (DuckDB SQL / dbt):
+```sql
+SELECT 
+    category,
+    ROUND(SUM(subtotal), 2) AS gross_revenue
+FROM staging.stg_order_items
+GROUP BY category;
+```
+*Why SQL here? The vectorized engine executes this across millions of rows in milliseconds using C++ SIMD, whereas Java Streams iterate object references on the JVM heap.*
+
+### Example 2: Dataframes (Polars vs Java Collections)
+Data engineers use **Polars** (written in Rust) or **PyArrow** instead of iterating POJO collections. A DataFrame is an in-memory columnar table that can process millions of operations per second with minimal memory footprint.
+
+---
+
+## 8. Where to Go From Here in this Codebase
+
+Follow this recommended path to see these concepts in action:
+
+1. **Inspect Raw Generation**: Look at [generate_raw_data.py](file:///sdcard/Download/termux/modern-data-stack-lab/generate_raw_data.py) to see how synthetic transactional data is saved to Parquet.
+2. **Run the Standalone ELT**: Check [pipeline_runner.py](file:///sdcard/Download/termux/modern-data-stack-lab/pipeline_runner.py) to see pure DuckDB creating staging views and marts.
+3. **Explore dbt Models**: Browse [models/staging/](file:///sdcard/Download/termux/modern-data-stack-lab/models/staging) and [models/marts/](file:///sdcard/Download/termux/modern-data-stack-lab/models/marts). Notice how `{{ ref(...) }}` links models together.
+4. **Run the dbt Pipeline**: Execute `dbt run --profiles-dir .` and inspect the resulting tables in `data/warehouse.duckdb`.

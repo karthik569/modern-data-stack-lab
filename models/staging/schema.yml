@@ -1,0 +1,67 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: "Staging view over raw customers parquet data"
+    columns:
+      - name: customer_id
+        description: "Primary key for customer"
+        data_tests:
+          - unique
+          - not_null
+      - name: email
+        data_tests:
+          - not_null
+      - name: created_at
+        data_tests:
+          - not_null
+
+  - name: stg_orders
+    description: "Staging view over raw orders parquet data"
+    columns:
+      - name: order_id
+        description: "Primary key for order"
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: "Foreign key referencing stg_customers"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: status
+        description: "Current lifecycle status of the order"
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['completed', 'returned', 'cancelled']
+      - name: order_date
+        data_tests:
+          - not_null
+
+  - name: stg_order_items
+    description: "Staging view over raw order items parquet data"
+    columns:
+      - name: order_item_id
+        description: "Primary key for order item"
+        data_tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: "Foreign key referencing stg_orders"
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+      - name: unit_price
+        data_tests:
+          - not_null
+      - name: quantity
+        data_tests:
+          - not_null

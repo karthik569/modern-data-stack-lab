@@ -1,0 +1,23 @@
+name: 'modern_data_stack_lab'
+version: '1.0.0'
+config-version: 2
+
+profile: 'modern_data_stack_lab'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  modern_data_stack_lab:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

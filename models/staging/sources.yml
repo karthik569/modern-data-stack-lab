@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: raw_parquet
+    description: "Raw Parquet source files generated from ingestion pipeline"
+    tables:
+      - name: raw_customers
+        meta:
+          external_location: "'/sdcard/Download/termux/modern-data-stack-lab/data/raw/customers.parquet'"
+      - name: raw_orders
+        meta:
+          external_location: "'/sdcard/Download/termux/modern-data-stack-lab/data/raw/orders.parquet'"
+      - name: raw_order_items
+        meta:
+          external_location: "'/sdcard/Download/termux/modern-data-stack-lab/data/raw/order_items.parquet'"

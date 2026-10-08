@@ -1,0 +1,40 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: "Materialized dimensional table for customers with aggregated lifetime stats"
+    columns:
+      - name: customer_id
+        description: "Primary key"
+        data_tests:
+          - unique
+          - not_null
+      - name: total_orders
+        description: "Total count of orders placed by customer"
+        data_tests:
+          - not_null
+      - name: lifetime_spend
+        description: "Total revenue generated from customer on completed orders"
+        data_tests:
+          - not_null
+
+  - name: fct_daily_sales
+    description: "Materialized daily sales fact table aggregated by date and product category"
+    columns:
+      - name: order_day
+        description: "Date of order aggregation"
+        data_tests:
+          - not_null
+      - name: category
+        description: "Product category"
+        data_tests:
+          - not_null
+      - name: total_orders
+        data_tests:
+          - not_null
+      - name: gross_revenue
+        data_tests:
+          - not_null
+      - name: net_revenue
+        data_tests:
+          - not_null
